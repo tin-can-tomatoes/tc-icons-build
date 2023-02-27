@@ -1,0 +1,1115 @@
+#!/bin/bash
+#
+#  Tin-Can Icon Theme Builder
+#  Copyright (c) 2023 tin-can-tomatoes
+#
+#
+TC_VERSION_MAJOR=0
+TC_VERSION_MINOR=1
+TC_VERSION_BUILD=1
+
+#########################
+##  Utility Functions  ##
+#########################
+
+failout(){
+  if [ "$PRINT_ERROR" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    printf '\033[0;31m'
+    echo "$1"
+    printf '\033[0m'
+  fi
+  echo "$1" >> "$LOG_TO_FILE"
+  exit 1
+}
+
+warn(){
+  if [ "$PRINT_WARNING" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    printf '\033[0;40m'
+    printf '\033[0;93m'
+    echo "$1"
+    printf '\033[0;49m'
+    printf '\033[0m'
+  fi
+  echo "$1" >> "$LOG_TO_FILE"
+}
+
+info(){
+  if [ "$PRINT_WARNING" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    printf '\033[0;34m'
+    echo "$1"
+    printf '\033[0m'
+  fi
+  echo "$1" >> "$LOG_TO_FILE"
+}
+
+check_dependency(){
+  if ! command -v "$1" &>/dev/null ; then
+    failout "Could not find required program '$1'"
+  fi
+}
+
+chk(){
+  if [ "$1" != 0 ] ; then
+    failout "$2"
+  fi
+}
+
+write_file(){
+  echo "$2" >> "$1"
+  chk $? "Failed to write $1"
+}
+
+log_v(){
+  if [ "$PRINT_VERBOSE" == true ] ; then
+    echo "$1"
+  fi
+  echo "$1" >> "$LOG_TO_FILE"
+}
+
+log_step(){
+  if [ "$PRINT_STEP" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    echo "$1"
+  fi
+  echo "$1" >> "$LOG_TO_FILE"
+}
+
+log_copy(){
+  if [ "$PRINT_FILES_COPYING" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    echo "Copying $1 to $2" 
+  fi
+  echo "Copying $1 to $2" >> "$LOG_TO_FILE"
+}
+
+log_link(){
+  if [ "$PRINT_FILES_LINKING" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    echo "Making link $1 <-- $2"
+  else
+    echo "Making link $1 <-- $2" >> "$LOG_TO_FILE"
+  fi
+}
+
+log_generating(){
+  if [ "$PRINT_FILES_GENERATING" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    echo "Generating file $1"
+  else
+    echo "Generating file $1" >> "$LOG_TO_FILE"
+  fi
+}
+
+log_generating_t(){
+  if [ "$PRINT_FILES_GENERATING" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    echo "Generating file $1 with template '$2'"
+  else
+    echo "Generating file $1 with template '$2'" >> "$LOG_TO_FILE"
+  fi
+}
+
+
+log_optimizing(){
+  if [ "$PRINT_FILES_OPTIMIZING" == true ] || [ "$PRINT_VERBOSE" == true ] ; then
+    echo "Optimizing $1" 
+  else
+    echo "Optimizing $1" >> "$LOG_TO_FILE"
+  fi
+}
+
+archive_output(){
+
+  local fbn=`basename $2`
+  if [ $BUILD_BZ2  == true ] ; then
+    while true ; do
+    if [ -f "$2.tar.bz2" ] && [ "$REBUILD" != true ]; then
+      touch "$BUILD_DIRECTORY/.hash/$fbn.tar.bz2.hash"
+
+      hash_archive "$2.tar.bz2" "$1"
+      newhash="$hashed_archive"
+      oldhash=$(<"$BUILD_DIRECTORY/.hash/$fbn.tar.bz2.hash")
+      if [ "$oldhash" == "$newhash" ] ; then 
+        info "Archive $fbn.tar.bz2 is up-to-date. Skipping re-archive"
+        break
+      else 
+        log_generating "$2.tar.bz2"
+        tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -jcvf "$2.tar.bz2" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.bz2"
+      
+        hash_checksum_file "$2.tar.bz2"
+        hash_archive "$2.tar.bz2" "$1"
+        echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.bz2.hash"
+      fi
+    else
+      log_generating "$2.tar.bz2"
+      tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -jcvf "$2.tar.bz2" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.bz2"
+
+      hash_checksum_file "$2.tar.bz2"
+      hash_archive "$2.tar.bz2" "$1"
+      echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.bz2.hash"
+    fi
+    break
+    done
+  fi
+  if [ $BUILD_GZ == true ] ; then
+    while true ; do
+    if [ -f "$2.tar.gz" ] && [ "$REBUILD" != true ]; then
+      touch "$BUILD_DIRECTORY/.hash/$fbn.tar.gz.hash"
+
+      hash_archive "$2.tar.gz" "$1"
+      newhash="$hashed_archive"
+      oldhash=$(<"$BUILD_DIRECTORY/.hash/$fbn.tar.gz.hash")
+      if [ "$oldhash" == "$newhash" ] ; then 
+        info "Archive $fbn.tar.gz is up-to-date. Skipping re-archive"
+        break
+      else 
+        log_generating "$2.tar.gz"
+        tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -zcvf "$2.tar.gz" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.gz"
+
+        hash_checksum_file "$2.tar.gz"
+        hash_archive "$2.tar.gz" "$1"
+        echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.gz.hash"
+      fi
+    else
+      log_generating "$2.tar.gz"
+      tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -zcvf "$2.tar.gz" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.gz"
+
+        hash_checksum_file "$2.tar.gz"
+      hash_archive "$2.tar.gz" "$1"
+      echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.gz.hash"
+    fi
+    break
+    done
+  fi
+  if [ $BUILD_XZ == true ] ; then
+    while true ; do
+    if [ -f "$2.tar.xz" ] && [ "$REBUILD" != true ]; then
+      touch "$BUILD_DIRECTORY/.hash/$fbn.tar.xz.hash"
+
+      hash_archive "$2.tar.xz" "$1"
+      newhash="$hashed_archive"
+      oldhash=$(<"$BUILD_DIRECTORY/.hash/$fbn.tar.xz.hash")
+      if [ "$oldhash" == "$newhash" ] ; then 
+        info "Archive $fbn.tar.xz is up-to-date. Skipping re-archive"
+        break
+      else 
+        log_generating "$2.tar.xz"
+        tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -I xz -cvf "$2.tar.xz" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.xz"
+
+        hash_checksum_file "$2.tar.xz"
+        hash_archive "$2.tar.xz" "$1"
+        echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.xz.hash"
+      fi
+    else
+      log_generating "$2.tar.xz"
+      tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -I xz -cvf "$2.tar.xz" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.xz"
+        hash_checksum_file "$2.tar.xz"
+      hash_archive "$2.tar.xz" "$1"
+      echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.xz.hash"
+    fi
+    break
+    done
+  fi
+  if [ $BUILD_ZST == true ] ; then
+
+    
+    while true ; do
+    if [ -f "$2.tar.zst" ] && [ "$REBUILD" != true ]; then
+      touch "$BUILD_DIRECTORY/.hash/$fbn.tar.zst.hash"
+
+      hash_archive "$2.tar.zst" "$1"
+      newhash="$hashed_archive"
+      oldhash=$(<"$BUILD_DIRECTORY/.hash/$fbn.tar.zst.hash")
+      if [ "$oldhash" == "$newhash" ] ; then 
+        info "Archive $fbn.tar.zst is up-to-date. Skipping re-archive"
+        break
+      else 
+        log_generating "$2.tar.zst"
+        tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -I zstd -cvf "$2.tar.zst" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.zst"
+        hash_checksum_file "$2.tar.zst"
+        hash_archive "$2.tar.zst" "$1"
+        echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.zst.hash"
+      fi
+    else
+      log_generating "$2.tar.zst"
+      tar --sort=name --owner=root:0 --group=root:0 --mtime='UTC 2019-01-01' -I zstd -cvf "$2.tar.zst" "$1" >> "$LOG_TO_FILE" 2>>"$LOG_TO_FILE" || failout "Failed to make archive $2.tar.zsr"
+      hash_checksum_file "$2.tar.zst"
+      hash_archive "$2.tar.zst" "$1"
+      echo "$hashed_archive" > "$BUILD_DIRECTORY/.hash/$fbn.tar.zst.hash"
+    fi
+    break
+    done
+  fi
+}
+
+hash_checksum_file(){
+  if [ -f "$1" ] ;  then
+    sha1sum "$1" | cut -d ' ' -f1 > "$1.sha1sum"
+  fi 
+}
+
+hash_output(){
+  local output1=""
+  if [ -d "$1" ] ; then
+    output1=`find "$1" -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -d ' ' -f1`
+  else
+    if [ -f "$1" ] ; then
+      output1=`sha1sum "$1" | cut -d ' ' -f1`
+    else 
+      output1='0'
+    fi
+  fi
+  local projecttheme=`sha1sum $PROJECT_DIRECTORY/icontheme.info | cut -d ' ' -f1`
+  local buildsettings=`sha1sum $PROJECT_DIRECTORY/build.settings | cut -d ' ' -f1`
+  local sourcedir=`find "$PROJECT_DIRECTORY/src" -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -d ' ' -f1`
+  local defdir=`find "$PROJECT_DIRECTORY/def" -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -d ' ' -f1`
+  hashed_output=`echo "${output1}-${projecttheme}-${buildsettings}-${sourcedir}-${defdir}-${BUILD_OPTIMIZE_SVG}-${BUILD_OPTIMIZE_PNG}-${SELECTED_VARIANTS[@]}-${SIZES_IN_USE[@]}-${TEMPLATES_IN_USE[@]}-${ADDITIONAL_LISTS_IN_USE[@]}" | sha1sum | cut -d ' ' -f1` 
+}
+
+hash_archive()
+{
+  local archive=""
+  local output1=""
+  if [ -f "$1" ] ; then 
+    archive=`sha1sum $1 | cut -d ' ' -f1`
+  else
+    archive="0"
+  fi
+  if [ -d "$2" ] ; then
+    output1=`find "$2" -type f -print0 | sort -z | xargs -0 sha1sum | sha1sum | cut -d ' ' -f1`
+  else
+    if [ -f $2 ] ; then
+      output1=`sha1sum $2 | cut -d ' ' -f1`
+    else
+      output1="0"
+    fi
+  fi
+  hashed_archive=`echo "${archive}${output1}" | sha1sum | cut -d ' ' -f1`
+}
+
+
+print_usage(){
+  echo "USAGE: tc-icons-build <directory> [options] [[alternative] [alternative] ...]"
+  echo "Options:"
+  echo "--svg             Generate SVG files"
+  echo "--freedesktop     Generate Freedesktop icon theme (implies --svg)"
+  echo "--png             Generate PNG files (implies --svg)"
+  echo "--ico             Generate Windows Icon (.ico) files (implies --png)"
+  echo "--bz2             Create .tar.bz2 archive of output"
+  echo "--gz              Create .tar.gz archive of output"
+  echo "--xz              Create .tar.xz archive of output"
+  echo "--zst             Create .tar.zst archive of output"
+  echo "--osvg            Optimize generated SVG files"
+  echo "--opng            Optimize generated PNG files"
+  echo "--all             Enable all the options listed above"
+}
+
+####################
+##  Declarations  ##
+####################
+TC_STARTED=`date +%F-%H-%M-%S`
+# Freedesktop icon categories
+declare -A FREEDESKTOP_ICON_CONTEXT
+FREEDESKTOP_ICON_CONTEXT[actions]=Actions
+FREEDESKTOP_ICON_CONTEXT[animations]=Animations
+FREEDESKTOP_ICON_CONTEXT[apps]=Applications
+FREEDESKTOP_ICON_CONTEXT[categories]=Categories
+FREEDESKTOP_ICON_CONTEXT[devices]=Devices
+FREEDESKTOP_ICON_CONTEXT[emblems]=Emblems
+FREEDESKTOP_ICON_CONTEXT[emotes]=Emotes
+FREEDESKTOP_ICON_CONTEXT[mimes]=MimeTypes
+FREEDESKTOP_ICON_CONTEXT[places]=Places
+FREEDESKTOP_ICON_CONTEXT[status]=Status
+FREEDESKTOP_ICON_CONTEXT[stock]=Stock
+
+# Default targets
+BUILD_SVG=false
+BUILD_FREEDESKTOP=false
+BUILD_PNG=false
+BUILD_ICO=false
+BUILD_GZ=false
+BUILD_XZ=false
+BUILD_ZST=false
+BUILD_BZ2=false
+BUILD_OPTIMIZE_SVG=false
+BUILD_OPTIMIZE_PNG=false
+
+# Default options
+PRINT_ERROR=true
+PRINT_WARNING=true
+PRINT_INFORMATION=true
+LOG_TO_FILE="$HOME/.cache/tc-icons-build/$TC_STARTED.log"
+
+# Active config
+SELECTED_VARIANTS=()
+SIZES_IN_USE=()
+TEMPLATES_IN_USE=()
+ADDITIONAL_LISTS_IN_USE=()
+
+declare -A VARIANTS_NAMES_T
+VARIANTS_IN_USE=()
+VARIANTS_NAMES=()
+VARIANTS_SLUGS=() 
+
+#####################
+##  Script begins  ##
+#####################
+mkdir -p "$HOME/.cache/tc-icons-build"
+
+info "tin-can.ca Icon Theme Builder $TC_VERSION_MAJOR.$TC_VERSION_MINOR.$TC_VERSION_BUILD"
+info ""
+
+
+
+# Use custom project directory if specified by env var
+if [ ! -z "$TC_ICON_PROJECT_DIRECTORY" ]; then
+  if [ -d "$TC_ICON_PROJECT_DIRECTORY" ] ; then
+    cd "$TC_ICON_PROJECT_DIRECTORY" || failout "Custom project directory specified but could not enter directory"
+  else 
+    failout "Custom project directory specified but does not exist"
+  fi
+fi
+
+# Save the full path of the current directory
+PROJECT_DIRECTORY=`pwd`
+
+######################
+# Preliminary Checks
+######################
+
+if [ -z "$1" ] ; then
+  print_usage
+  failout "Missing argument for build directory"
+fi
+
+# Check we're running the script in the right place
+if  [ ! -f "icontheme.info" ] ; then
+  failout "Could not find file icontheme.info, please ensure you are running this script in the correct directory"
+fi
+
+if [ ! -f "build.settings" ] ; then
+  failout "Could not find file templates.default"
+fi
+
+
+##########################
+# Load theme information
+##########################
+declare -A ICON_THEME_NAME_T
+declare -A ICON_THEME_DESCRIPTION_T
+
+# default for optional variables
+ICON_THEME_MIN_SIZE=8
+ICON_THEME_MAX_SIZE=1024
+ICON_THEME_SCALABLE_NOMINAL_SIZE=128
+
+# Load theme info
+source build.settings
+source icontheme.info
+
+
+#############################
+# Check theme info is valid
+#############################
+if [ -z "$ICON_THEME_NAME" ] ; then
+  failout "Theme info file missing ICON_THEME_NAME"
+fi
+if [ -z "$ICON_THEME_DESCRIPTION" ] ; then
+  failout "Theme info file missing ICON_THEME_DESCRIPTION"
+fi
+if [ -z "$ICON_THEME_SLUG" ] ; then
+  failout "Theme info file missing ICON_THEME_SLUG"
+fi
+if [ -z "$ICON_THEME_VERSION" ] ; then
+  warn "WARNING: Theme info file missing ICON_THEME_EXAMPLE. Using default \"folder\""
+  ICON_THEME_EXAMPLE="folder"
+fi
+if [ -z "$ICON_THEME_SIZES" ] ; then
+  failout "Theme info file missing ICON_THEME_SIZES"
+fi
+if [ -z "$ICON_THEME_TEMPLATES" ] ; then
+  failout "Theme info file missing ICON_THEME_TEMPLATES"
+fi
+if [ -z "$ICON_THEME_INHERITS" ] ; then
+  warn "WARNING: Theme info file missing ICON_THEME_INHERITS. Using default \"hicolor\""
+  ICON_THEME_INHERITS=(hicolor)
+fi
+if [ -z "$ICON_THEME_VERSION" ] ; then
+  warn "WARNING: Theme info file missing ICON_THEME_VERSION. Using default \"0.0.1\""
+  ICON_THEME_VERSION="0.0.1"
+fi
+if [ -z "$ICON_THEME_ADDITIONAL_SCALES" ] ; then
+  info "Information: No additional scales supported by theme"
+  ICON_THEME_ADDITIONAL_SCALES=()
+fi
+if [ "${#ICON_THEME_NAME_T[@]}" = "0" ] ; then
+  warn "WARNING: No name translations"
+fi
+if [ "${#ICON_THEME_DESCRIPTION_T[@]}" = "0" ] ; then
+  warn "WARNING: No description translations"
+fi
+
+#################################
+# Check that theme includes the
+# directories it says it should
+#################################
+log_step "Theme configuration loaded. Checking theme."
+for sz in "${ICON_THEME_SIZES[@]}" ; do
+  if [ ! -d "$PROJECT_DIRECTORY/src/$sz" ] ; then
+    failout "Theme specifies support for size \"$sz\" icons, but no folder named \"$sz\" exists in the src directory."
+  fi
+done
+for tp in "${ICON_THEME_TEMPLATES[@]}" ; do
+  if [ ! -f "$PROJECT_DIRECTORY/def/templates/$tp" ] ; then
+    failout "Theme requires template \"$tp\", but no file named \"$tp\" exists in the def/templates directory."
+  fi
+done
+SIZES_IN_USE=( "${ICON_THEME_SIZES[@]}" )
+TEMPLATES_IN_USE=( "${ICON_THEME_TEMPLATES[@]}")
+
+
+log_step "Checking build directory."
+# check (and create) build directory
+if [ -d "$1" ] ; then
+  log_v "Build directory exists."
+else
+  log_v "Build directory not found. Attempting to create..."
+  mkdir -p "$1"
+  if [ ! -d "$1" ] ; then
+    failout "Failed to create build directory"
+  fi
+  log_v "Created directory succressfully"
+fi
+
+cd "$1" || failout "Failed to change directory into $1"
+
+# Store full path to build directory
+BUILD_DIRECTORY=`pwd`
+mkdir -p "$BUILD_DIRECTORY/.hash" || failout "Failed to create hash directory"
+cd "$PROJECT_DIRECTORY" || failout "Failed to change directory into $PROJECT_DIRECTORY"
+
+shift
+
+###############
+# Parse args
+###############
+for arg in "${@}" ; do
+
+  case "$arg" in
+    "--svg")
+      check_dependency tc-svg-merge
+      log_v "SVG build selected"
+      BUILD_SVG=true
+      ;;
+    "--freedesktop")
+      check_dependency tc-svg-merge
+      log_v "Freedesktop Icon Theme build selected"
+      BUILD_SVG=true
+      BUILD_FREEDESKTOP=true
+      ;;
+    "--png")
+      check_dependency inkscape
+      check_dependency convert
+      log_v "PNG build selected"
+      BUILD_SVG=true
+      BUILD_PNG=true
+      ;;
+    "--ico")
+      check_dependency inkscape
+      check_dependency convert
+      log_v "Windows Icon (.ico) build selected"
+      BUILD_SVG=true
+      BUILD_PNG=true
+      BUILD_ICO=true
+      ;;
+    "--gz")
+      check_dependency tar
+      check_dependency gzip
+      log_v "tar.gz output selected"
+      BUILD_GZ=true
+      ;;
+    "--xz")
+      check_dependency tar
+      check_dependency xz
+      log_v "tar.xz output selected"
+      BUILD_XZ=true
+      ;;
+    "--zstd")
+      check_dependency tar
+      check_dependency zstd
+      log_v "tar.zst output selected"
+      BUILD_ZST=true
+      ;;
+    "--zst")
+      check_dependency tar
+      check_dependency zstd
+      log_v "tar.zst output selected"
+      BUILD_ZST=true
+      ;;
+    "--bz2")
+      check_dependency bzip2
+      log_v "tar.bz2 output selected"
+      BUILD_BZ2=true
+      ;;
+    "--osvg")
+      check_dependency svgo
+      log_v "Optimize SVG files selected"
+      BUILD_OPTIMIZE_SVG=true
+      ;;
+    "--opng")
+      check_dependency optipng
+      log_v "Optimize PNG files selected"
+      BUILD_OPTIMIZE_PNG=true
+      ;;
+    "--all")
+      check_dependency tar
+      check_dependency inkscape
+      check_dependency convert
+      check_dependency gzip
+      check_dependency xz
+      check_dependency zstd
+      check_dependency bzip2
+      check_dependency svgo
+      check_dependency optipng
+      log_v "All Options selected"
+      BUILD_SVG=true
+      BUILD_FREEDESKTOP=true
+      BUILD_PNG=true
+      BUILD_ICO=true
+      BUILD_GZ=true
+      BUILD_XZ=true
+      BUILD_ZST=true
+      BUILD_BZ2=true
+      BUILD_OPTIMIZE_SVG=true
+      BUILD_OPTIMIZE_PNG=true
+      ;;
+    *)
+      SELECTED_VARIANTS+=( "$arg" )
+      ;;
+  esac
+  
+done
+
+##################
+# Load variants
+##################
+log_step "Loading variant information"
+for var in "${SELECTED_VARIANTS[@]}" ; do
+  # Check variant file exists
+  if [ -f "$PROJECT_DIRECTORY/def/alternatives/$var.variant" ] ; then
+    VARIANT_NAME=""
+    VARIANT_SLUG=""
+    ADDITIONAL_TEMPLATES=()
+    ADDITIONAL_LISTS=()
+    unset VARIANT_NAME_T
+    declare -A VARIANT_NAME_T
+
+    source "$PROJECT_DIRECTORY/def/alternatives/$var.variant"
+
+    # Check file contains the correct variables
+    if [ -z "$VARIANT_NAME" ]; then
+      failout "Loaded variant $var, but file did not contain a variant name"
+    fi
+    if [ -z "$VARIANT_SLUG" ]; then
+      failout "Loaded variant $var, but file did not contain a variant slug"
+    fi
+    if [ "${#VARIANT_NAME_T[@]}" = "0" ] ; then
+      warn "WARNING: Variant $VARIANT_SLUG has no translations"
+    fi
+
+    # Check templates exist
+    for tpl in "${ADDITIONAL_TEMPLATES[@]}" ; do
+      if [ -f "$PROJECT_DIRECTORY/def/templates/$tpl" ] || [ -L "$PROJECT_DIRECTORY/def/templates/$tpl" ]; then
+        TEMPLATES_IN_USE+=("$tpl")
+      else 
+          failout "Variant \"$var\" requires template \"$tpl\", but the template does not exist in def/templates"
+      fi
+    done
+
+    # Check lists exist
+    for list in "${ADDITIONAL_LISTS[@]}" ; do
+      if [ -d "$PROJECT_DIRECTORY/def/alternatives/$list" ] ; then
+        ADDITIONAL_LISTS_IN_USE+=("$list")
+      else 
+          failout "Variant \"$var\" requires list, \"$list\", but the directory does not exist in def/alternatives"
+      fi
+    done
+
+    # Save the name & slugs
+    VARIANTS_IN_USE+=( "$var")
+    VARIANTS_NAMES+=("$VARIANT_NAME")
+    VARIANTS_SLUGS+=("$VARIANT_SLUG")
+    for lang in "${!VARIANT_NAME_T[@]}" ; do 
+      VARIANTS_NAMES_T["${lang}_${var}"]="${VARIANT_NAME_T[$lang]}"
+    done
+  else
+    failout "Variant \"$var\" selected, but no file named \"$var.variant\" exists in def/alternatives"
+  fi
+done
+
+
+#################################
+# Determine final names and slugs
+#################################
+log_step "Compiling names and translations"
+declare -A FINAL_THEME_NAME_T
+FINAL_THEME_NAME="$ICON_THEME_NAME"
+FINAL_THEME_SLUG="$ICON_THEME_SLUG"
+
+FIRST=true
+for name in "${VARIANTS_NAMES[@]}" ; do
+  if [ "$FIRST" = "true" ] ; then
+    FINAL_THEME_NAME="$FINAL_THEME_NAME ("
+    FIRST=false
+  else
+    FINAL_THEME_NAME="$FINAL_THEME_NAME, "
+  fi
+  FINAL_THEME_NAME="$FINAL_THEME_NAME$name"
+done
+if [ "$FINAL_THEME_NAME" != "$ICON_THEME_NAME" ] ; then
+  FINAL_THEME_NAME="$FINAL_THEME_NAME)"
+fi
+
+for slug in "${VARIANTS_SLUGS[@]}" ; do
+  if [ ! -z "$slug" ] ; then
+    FINAL_THEME_SLUG="$FINAL_THEME_SLUG-$slug"
+  fi
+done
+
+
+for lang in "${!ICON_THEME_NAME_T[@]}" ; do
+  FIRST=true
+  FINAL_THEME_NAME_T[$lang]="${ICON_THEME_NAME_T[$lang]}"
+  for vari in "${!VARIANTS_IN_USE[@]}" ; do
+    key="${lang}_${VARIANTS_IN_USE[$vari]}"
+    val=""
+    if [ -z "${VARIANTS_NAMES_T["$key"]}" ] ; then
+      val=${VARIANTS_NAMES[$vari]}
+    else 
+      val="${VARIANTS_NAMES_T["$key"]}"
+    fi
+
+    if [ "$FIRST" = "true" ] ; then
+      FINAL_THEME_NAME_T[$lang]="${FINAL_THEME_NAME_T[$lang]} ("
+      FIRST=false
+    else
+      FINAL_THEME_NAME_T[$lang]="${FINAL_THEME_NAME_T[$lang]}, "
+    fi
+    FINAL_THEME_NAME_T[$lang]="${FINAL_THEME_NAME_T[$lang]}$val"
+  done
+  if [ "${FINAL_THEME_NAME_T[$lang]}" != "${ICON_THEME_NAME_T[$lang]}" ] ; then
+    FINAL_THEME_NAME_T[$lang]="${FINAL_THEME_NAME_T[$lang]})"
+  fi
+done
+
+
+info ""
+info "Theme information:"
+info "Name:                            $FINAL_THEME_NAME"
+info "Version:                         $ICON_THEME_VERSION"
+info "Slug:                            $FINAL_THEME_SLUG"
+info "Sizes:                           ${SIZES_IN_USE[@]}"
+info "Enabled variants:                ${VARIANTS_IN_USE[@]}"
+info "Templates:                       ${TEMPLATES_IN_USE[@]}"
+info "Additional lists:                ${ADDITIONAL_LISTS_IN_USE[@]}"
+info "Building SVG Files:              $BUILD_SVG"
+info "Building Freedesktop Icon Theme: $BUILD_FREEDESKTOP"
+info "Building PNG Files:              $BUILD_PNG"
+info "Building ICO Files:              $BUILD_ICO"
+info "Optimizing SVG Files:            $BUILD_OPTIMIZE_SVG"
+info "Optimizing PNG Files:            $BUILD_OPTIMIZE_PNG"
+info ".tar.bz2 output:                 $BUILD_BZ2"
+info ".tar.gz output:                  $BUILD_GZ"
+info ".tar.xz output:                  $BUILD_XZ"
+info ".tar.zst output:                 $BUILD_ZST"
+info " "
+info " "
+
+#######################
+######################
+## Building the
+##    SVG Files
+##        
+#######################
+#######################
+if [ $BUILD_SVG = true ] ; then
+while true ; do
+  log_step "Building SVG output..."
+  if [ -d "$BUILD_DIRECTORY/svg" ] ; then
+    if [ "$REBUILD" = true ] ; then
+      info "Found svg directory in build dir. Removing and rebuilding."
+      rm -r "$BUILD_DIRECTORY/svg" || failout "Failed to remove existing svg folder"
+    else       
+      touch "$BUILD_DIRECTORY/.hash/svg.hash"
+      
+      hash_output "$BUILD_DIRECTORY/svg"
+      newhash="$hashed_output"
+      oldhash=$(<"$BUILD_DIRECTORY/.hash/svg.hash")
+      
+      if [ "$oldhash" == "$newhash" ] ; then
+        info "Found up-to-date svg directory in build dir. Skipping SVG Build."
+        break
+      else 
+        info "Found out of date or modified svg directory in build dir. Removing and rebuilding."
+        rm -r "$BUILD_DIRECTORY/svg" || failout "Failed to remove existing svg folder"
+      fi
+    fi
+  fi
+
+  echo '1' > "$BUILD_DIRECTORY/.hash/svg.hash"
+
+  mkdir -p "$BUILD_DIRECTORY/svg" || failout "Failed to create directory for svg output"
+  
+
+  for size in "${SIZES_IN_USE[@]}" ; do
+    mkdir -p "$BUILD_DIRECTORY/svg/$size" || failout "Failed to create directory for svg output, size $size"
+
+    for file in "$PROJECT_DIRECTORY"/src/$size/*.svg ; do
+      log_copy "$file" "$BUILD_DIRECTORY/svg/$size/"
+      cp "$file" "$BUILD_DIRECTORY/svg/$size/" ||failout "Failed to copy $file into $BUILD_DIRECTORY/svg/$size"
+    done
+    for template in "${TEMPLATES_IN_USE[@]}" ; do 
+      if [ ! -f "$PROJECT_DIRECTORY/src/${size}/templates/${template}.svg" ] ; then
+        failout "Missing template base file ${size}/templates/${template}.svg"
+      fi
+      while read -r line
+      do
+        ln=""
+        overlays=()
+
+        for name in $line ; do
+          ln="$name"
+          ol="$PROJECT_DIRECTORY/src/${size}/overlays/$name.svg"
+          if [ -f "$ol" ] ; then
+            overlays+=("$ol")
+          else
+            lastl=`echo "$line" | rev | cut -d ' ' -f 1 | rev `
+            if [ "$ln" == "$lastl" ] ; then
+              break
+            fi
+            if [ "$NOERROR_MISSING_OVERLAY" == true ] ; then
+              if [ "$WARN_MISSING_OVERLAY" == true ] ; then
+                warn "WARNING! Missing overlay image $ol"
+              fi
+              if [ "$SKIP_MISSING_OVERLAY" == true ] ; then
+                info "Skipping template $size/$name"
+                continue 2
+              fi
+            else 
+                failout "Missing overlay image $ol"
+            fi
+          fi
+        done
+
+        OLDIFS="$IFS"
+        IFS=","
+        log_generating_t "$BUILD_DIRECTORY/svg/${size}/${ln}.svg" "$template"
+        tc-svg-merge "$BUILD_DIRECTORY/svg/${size}/${ln}.svg" "$PROJECT_DIRECTORY/src/${size}/templates/${template}.svg" ${overlays[*]} >> "$LOG_TO_FILE"
+
+        if [ "$?" != 0 ] ; then
+          failout "Failed to generate $BUILD_DIRECTORY/svg/${size}/${ln}.svg "
+        fi
+        
+        IFS="$OLDIFS"
+      done < "$PROJECT_DIRECTORY/def/templates/$template"
+    done
+
+    if [ "$BUILD_OPTIMIZE_SVG" == "true" ] ; then
+      log_optimizing "$BUILD_DIRECTORY/svg/${size}"
+      svgo -f "$BUILD_DIRECTORY/svg/${size}" $SVGO_EXTRA_OPT >> "$LOG_TO_FILE"
+    fi
+  done
+
+
+  hash_output "$BUILD_DIRECTORY/svg"
+  echo "$hashed_output" > "$BUILD_DIRECTORY/.hash/svg.hash"
+
+  break
+done
+
+  cd "$BUILD_DIRECTORY"
+  archive_output "svg" "$FINAL_THEME_SLUG-$ICON_THEME_VERSION-svg"
+fi
+
+#######################
+######################
+## Building the
+##    Freedesktop
+##        icon theme
+#######################
+#######################
+
+if [ $BUILD_FREEDESKTOP = true ] ;  then
+  while true ; do
+  log_step "Building freedesktop icon theme..."
+  if [ $BUILD_SVG != true ] ; then
+    failout "Somehow we're trying to build a freedesktop theme without SVG files"
+  fi
+  
+  #
+  # Rebuild logic
+  # 
+  if [ -d "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG" ] ; then
+    if [ "$REBUILD" = true ] ; then
+      info "Found icon theme directory in build dir. Removing and rebuilding."
+      rm -r "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG" || failout "Failed to remove existing icon theme folder"
+    else 
+      
+      touch "$BUILD_DIRECTORY/.hash/${FINAL_THEME_SLUG}.hash"
+      
+      hash_output "$BUILD_DIRECTORY/freedesktop/${FINAL_THEME_SLUG}"
+      newhash="$hashed_output"
+      oldhash=$(<"$BUILD_DIRECTORY/.hash/${FINAL_THEME_SLUG}.hash")
+      
+      if [ "$oldhash" == "$newhash" ] ; then
+        info "Found up-to-date icon theme directory in build dir. Skipping."
+        break
+      else 
+        info "Found out of date or modified icon theme directory in build dir. Clearing."
+        rm -r "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG" || failout "Failed to remove existing icon theme folder"
+      fi
+    fi
+  fi
+
+  echo '1' > "$BUILD_DIRECTORY/.hash/$FINAL_THEME_SLUG.hash"
+
+  #
+  # Build directory structure
+  #
+  log_v "Building icon theme directory structure in $BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG"
+  mkdir -p "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG" || failout "Failed to create directory for freedesktop theme"
+  FDT_DIRS=()
+  FDT_CONTEXTS=()
+  for fld in "${!FREEDESKTOP_ICON_CONTEXT[@]}" ; do
+
+    for sz in "${SIZES_IN_USE[@]}"; do
+      mkdir -p "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG/$fld/$sz" || failout "Failed to create directory for freedesktop theme, $fld/$sz"
+      FDT_DIRS+=("$fld/$sz")
+      FDT_CONTEXTS+=("${FREEDESKTOP_ICON_CONTEXT[$fld]}")
+      
+    done
+    for scale in "${ICON_THEME_ADDITIONAL_SCALES[@]}" ; do
+      cd "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG" || failout "Failed to change directory"
+      ln -s "${fld}" "${fld}@${scale}x" || failout "Failed to create symbolic link ${fld}@${scale}x"
+      cd "$PROJECT_DIRECTORY" || failout "Failed to change directory"
+    done
+  done
+  
+  #
+  # Write index.theme
+  #
+
+  OLDIFS="$IFS"
+  IFS=","
+  FD_INDEX_THEME="$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG/index.theme"
+
+  log_generating "$FD_INDEX_THEME"
+
+  write_file "$FD_INDEX_THEME" "[Icon Theme]"
+  write_file "$FD_INDEX_THEME" "Name=$FINAL_THEME_NAME"
+  for lang in "${!FINAL_THEME_NAME_T[@]}" ; do
+    write_file "$FD_INDEX_THEME" "Name[$lang]=${FINAL_THEME_NAME_T[$lang]}"
+  done
+  write_file "$FD_INDEX_THEME" "Comment=$ICON_THEME_DESCRIPTION"
+  for lang in "${!ICON_THEME_DESCRIPTION_T[@]}" ; do
+    write_file "$FD_INDEX_THEME"  "Comment[$lang]=${ICON_THEME_DESCRIPTION_T[$lang]}"
+  done
+  write_file "$FD_INDEX_THEME" "Example=$ICON_THEME_EXAMPLE"
+  write_file "$FD_INDEX_THEME" "Inherits=${ICON_THEME_INHERITS[*]}"
+
+  TC_THEME_DIRS=()
+  for ctx in "${!FREEDESKTOP_ICON_CONTEXT[@]}" ; do
+    for sz in "${SIZES_IN_USE[@]}" ; do
+      TC_THEME_DIRS+=("${ctx}/${sz}")
+      for sc in "${ICON_THEME_ADDITIONAL_SCALES[@]}" ; do
+        TC_THEME_DIRS+=("${ctx}@${sc}x/${sz}")
+      done
+    done
+  done
+  write_file "$FD_INDEX_THEME" "Directories=${TC_THEME_DIRS[*]}"
+  write_file "$FD_INDEX_THEME" ""
+  write_file "$FD_INDEX_THEME" ""
+
+  for ctx in "${!FREEDESKTOP_ICON_CONTEXT[@]}" ; do
+    for sz in "${SIZES_IN_USE[@]}" ; do
+      write_file "$FD_INDEX_THEME" "[${ctx}/${sz}]"
+      if [ "$sz" == "scalable" ] || [ "$sz" == "Scalable" ] ; then
+          write_file "$FD_INDEX_THEME" "Size=${ICON_THEME_SCALABLE_NOMINAL_SIZE}"
+          write_file "$FD_INDEX_THEME" "MinSize=${ICON_THEME_MIN_SIZE}"
+          write_file "$FD_INDEX_THEME" "MaxSize=${ICON_THEME_MAX_SIZE}"
+      else 
+          write_file "$FD_INDEX_THEME" "Size=${sz}"
+          write_file "$FD_INDEX_THEME" "MinSize=${ICON_THEME_MIN_SIZE}"
+          write_file "$FD_INDEX_THEME" "MaxSize=${sz}"
+      fi
+      write_file "$FD_INDEX_THEME" "Context=${FREEDESKTOP_ICON_CONTEXT[$ctx]}"
+      write_file "$FD_INDEX_THEME" "Type=Scalable"
+      write_file "$FD_INDEX_THEME" ""
+      for sc in "${ICON_THEME_ADDITIONAL_SCALES[@]}" ; do
+        write_file "$FD_INDEX_THEME" "[${ctx}@${sc}x/${sz}]"
+        write_file "$FD_INDEX_THEME" "Scale=${sc}"
+        if [ "$sz" == "scalable" ] || [ "$sz" == "Scalable" ] ; then
+            write_file "$FD_INDEX_THEME" "Size=${ICON_THEME_SCALABLE_NOMINAL_SIZE}"
+            write_file "$FD_INDEX_THEME" "MinSize=${ICON_THEME_MIN_SIZE}"
+            write_file "$FD_INDEX_THEME" "MaxSize=${ICON_THEME_MAX_SIZE}"
+        else 
+            write_file "$FD_INDEX_THEME" "Size=${sz}"
+            write_file "$FD_INDEX_THEME" "MinSize=${ICON_THEME_MIN_SIZE}"
+            write_file "$FD_INDEX_THEME" "MaxSize=${sz}"
+        fi
+        write_file "$FD_INDEX_THEME" "Context=${FREEDESKTOP_ICON_CONTEXT[$ctx]}"
+        write_file "$FD_INDEX_THEME" "Type=Scalable"
+        write_file "$FD_INDEX_THEME" ""
+      done
+    done
+  done
+
+  IFS="$OLDIFS"
+  # done writing index.theme
+  
+  log_v "Copying svg files into icon theme"
+  cd "$PROJECT_DIRECTORY/def/destinations" || failout "Failed to change directory"
+  for size in "${SIZES_IN_USE[@]}" ; do
+    for file in * ; do
+      FIRST=0
+      ORIGINAL_FILE=''
+      while read -r line
+      do
+        iconcategory=`dirname $line`
+        iconname=`basename $line`
+        thisiconfile="$iconcategory/$size/$iconname.svg"
+        if [ $FIRST = 0 ]; then
+          if [ -f "$BUILD_DIRECTORY/svg/$size/$file.svg" ] ; then
+            log_copy "$BUILD_DIRECTORY/svg/$size/$file.svg" "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG/$thisiconfile"
+            cp "$BUILD_DIRECTORY/svg/$size/$file.svg" "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG/$thisiconfile" || failout "Failed to copy $FINAL_THEME_SLUG/$thisiconfile"
+          else 
+            if [ "$NOERROR_MISSING_ICON" == true ] ; then
+              if [ "$WARN_MISSING_ICON" == true ] ; then
+                warn "WARNING: Missing source icon $size/$file.svg"
+              fi
+            else
+              failout "Missing source icon $size/$file.svg"
+            fi
+          fi
+          FIRST=1
+          ORIGINAL_FILE="$thisiconfile"
+        else
+          if [ -f "$BUILD_DIRECTORY/svg/$size/$file.svg" ] ; then
+            log_link "$ORIGINAL_FILE" "$thisiconfile ..."
+            ln -s "../../$ORIGINAL_FILE" "$BUILD_DIRECTORY/freedesktop/$FINAL_THEME_SLUG/$thisiconfile" || failout "Failed to link $ORIGINAL_FILE to $thisiconfile!"
+          else
+            log_v "INFORMATION: Skipping link at $thisiconfile to $ORIGINAL_FILE. Missing source icon $size/$file.svg"
+          fi
+        fi
+      done < "$file"
+    done
+  done
+
+
+  hash_output "$BUILD_DIRECTORY/freedesktop/${FINAL_THEME_SLUG}"
+  echo "$hashed_output" > "$BUILD_DIRECTORY/.hash/${FINAL_THEME_SLUG}.hash"
+
+  break
+  done
+
+  cd "$BUILD_DIRECTORY/freedesktop"
+  archive_output "$FINAL_THEME_SLUG" "../$FINAL_THEME_SLUG-$ICON_THEME_VERSION-icon-theme"
+fi
+
+##########################
+##########################
+##
+## Building PNG Files
+##
+##########################
+##########################
+if [ $BUILD_PNG = true ] ;  then
+  while true ; do
+  if [ $BUILD_SVG != true ] ; then
+    failout "Somehow we're trying to build PNG files without SVG files"
+  fi
+
+  if [ -d "$BUILD_DIRECTORY/png" ] ; then  
+    if [ "$REBUILD" = true ] ; then
+      info "Found png directory in build dir. Removing and rebuilding."
+      rm -r "$BUILD_DIRECTORY/png" || failout "Failed to remove existing png folder"
+    else 
+      touch "$BUILD_DIRECTORY/.hash/png.hash"
+      
+      hash_output "$BUILD_DIRECTORY/png"
+      newhash="$hashed_output"
+      oldhash=$(<"$BUILD_DIRECTORY/.hash/png.hash")
+      
+      if [ "$oldhash" == "$newhash" ] ; then
+        info "Found up-to-date png directory in build dir. Skipping."
+        break
+      else 
+        info "Found out of date or modified png directory in build dir. Clearing."
+        rm -r "$BUILD_DIRECTORY/png" || failout "Failed to remove existing png folder"
+      fi
+    fi
+  fi
+
+  mkdir -p "$BUILD_DIRECTORY/png" || failout "Failed to create directory for png output"
+  
+
+  for size in "${SIZES_IN_USE[@]}" ; do
+    mkdir -p "$BUILD_DIRECTORY/png/$size" || failout "Failed to create directory for png output, size $size"
+
+    cd "$PROJECT_DIRECTORY/def/destinations"
+    for file in * ; do
+      log_generating "$BUILD_DIRECTORY/png/$size/$file.png"
+      DISPLAY="" inkscape --without-gui --batch-process --export-dpi=96 --export-area-page --export-type=png "--export-filename=$BUILD_DIRECTORY/png/$size/${file}.png" "$BUILD_DIRECTORY/svg/${size}/${file}.svg" >> "$LOG_TO_FILE" 2>> "$LOG_TO_FILE" || failout "Failed converting $BUILD_DIRECTORY/svg/${size}/${file}.svg" 
+      if [ $BUILD_OPTIMIZE_PNG == true ]; then
+        optipng -o7 "$BUILD_DIRECTORY/png/$size/${file}.png" >> "$LOG_TO_FILE" 2>> "$LOG_TO_FILE" || failout "Failed optimizing $BUILD_DIRECTORY/png/$size/$file.png" 
+      fi
+    done
+    for scale in "${ICON_THEME_ADDITIONAL_SCALES[@]}" ; do
+      mkdir -p "$BUILD_DIRECTORY/png/$size@${scale}x/" || failout "Failed to create directory for png output, scale $size"
+
+      cd "$PROJECT_DIRECTORY/def/destinations"
+		  for file in * ; do
+        log_generating "$BUILD_DIRECTORY/png/$size@${scale}x/$file"
+        icon_dpi=$((96*$scale))
+        DISPLAY="" inkscape --without-gui --batch-process --export-dpi=$icon_dpi --export-area-page --export-type=png "--export-filename=$BUILD_DIRECTORY/png/$size@${scale}x/${file}.png" "$BUILD_DIRECTORY/svg/${size}/${file}.svg" >> "$LOG_TO_FILE" 2>> "$LOG_TO_FILE" || failout "Failed converting $BUILD_DIRECTORY/svg/${size}@${scale}/${file}.svg" 
+        if [ $BUILD_OPTIMIZE_PNG == true ]; then
+          optipng -o7 "$BUILD_DIRECTORY/png/$size@${scale}x/${file}.png" >> "$LOG_TO_FILE" 2>> "$LOG_TO_FILE" || failout "Failed optimizing $BUILD_DIRECTORY/png/$size@${scale}/$file.png" 
+        fi
+      done
+    done
+  done
+
+  hash_output "$BUILD_DIRECTORY/png"
+  echo "$hashed_output" > "$BUILD_DIRECTORY/.hash/png.hash"
+
+
+  break
+  done
+
+  cd "$BUILD_DIRECTORY"
+  archive_output "png" "$FINAL_THEME_SLUG-$ICON_THEME_VERSION-png"
+fi
+
+##########################
+##########################
+##
+## Building Icon Files
+##
+##########################
+##########################
+if [ $BUILD_ICO = true ] ;  then
+
+  if [ $BUILD_PNG != true ] ; then
+    failout "Somehow we're trying to build ICO files without PNG files"
+  fi
+
+  if [ -d "$BUILD_DIRECTORY/ico" ] ; then
+    echo "Found png directory in build dir. Clearing."
+    rm -r "$BUILD_DIRECTORY/ico" || failout "Failed to remove existing ico folder"
+  fi
+
+  mkdir -p "$BUILD_DIRECTORY/ico" || failout "Failed to create directory for ico output"
+  
+
+  cd "$PROJECT_DIRECTORY/def/destinations"
+  for file in * ; do
+
+    convert "$BUILD_DIRECTORY/png/*/$file.png" "$BUILD_DIRECTORY/ico/$file.ico"
+
+  done
+fi
