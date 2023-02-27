@@ -1,6 +1,14 @@
 # tc-icons-build
 Bash script for compiling icon themes
 
+## Installation
+
+Place somewhere in PATH. Or place in a directory, and add that directory to path. Ensure it is marked executable.
+
+## Usage/Examples
+
+Coming soon. 
+
 ## Features
 
  - Composites SVG images from sets of templates to reduce duplication and allow for easy inclusion of alternative designs
