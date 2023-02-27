@@ -48,6 +48,12 @@ The issue is, most implementations will choose the 32px@2x icons when a 64px@1x 
 
 The intended fix is to allow an alternative method of supporting HiDPI screens by producing independant icon themes for each scale factor supported, rather than relying on the "Scale" property
 
+### PNG Conversion
+
+PNG conversion is very slow. Optimization makes it even worse. The main culprit is that inkscape is used to convert the images, as it renders the SVG files far more acccurately than anything else I've tried. Unfortunately, it is very resource intensive to spin up an inkscape process to export the images. 
+
+Because of this, it is reccommended to avoid PNG conversion until the theme is ready to be packaged and released.
+
 ### ICO File Generation
 
 ... is completely broken. A fix should be easy, but is low on my priority list.
