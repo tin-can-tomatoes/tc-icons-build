@@ -1,5 +1,6 @@
 # tc-icons-build
-Bash script for compiling icon themes
+
+Bash script for compiling SVG icon themes that adhere to the freedesktop icon specification
 
 ## Installation
 
@@ -7,7 +8,7 @@ Place somewhere in PATH. Or place in a directory, and add that directory to path
 
 ## Usage/Examples
 
-Coming soon. 
+For now, see how the script is used by examining the file structures of [ClassicOS-Platinum-Icons](https://github.com/ClassicOS-Themes/ClassicOS-Platinum-Icons) and [ClassicOS-2000-Icons/version2-wip](https://github.com/ClassicOS-Themes/ClassicOS-2000-Icons/tree/version2-wip). 
 
 ## Features
 
